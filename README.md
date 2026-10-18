@@ -6,7 +6,7 @@ See [PLAN.md](PLAN.md) for the full build plan.
 
 ## Architecture
 
-- **Pipeline A — Batch ingestion**: S3 → Snowpipe → Snowflake Bronze/Silver/Gold (medallion architecture) using SQL transformations, Dynamic Tables, and Streams/Tasks for CDC.
+- **Pipeline A — Batch ingestion**: S3 → (Lambda file-tracking + Snowpipe, independently) → Snowflake Bronze/Silver/Gold (medallion architecture) using SQL transformations, Dynamic Tables, and Streams/Tasks for CDC. The Lambda tracks every file delivery in DynamoDB, flags duplicates, and quarantines invalid files before Snowpipe loads them.
 - **Pipeline B — Real-time event processing**: Kafka → Spark Structured Streaming, with checkpointing, watermarking, and dedup, writing to Delta Lake or Snowflake.
 - **Pipeline C — Governance & operational monitoring**: PII masking, role-based access, pipeline run logs, freshness checks, alerting, and CI/CD via GitHub Actions.
 
@@ -34,7 +34,7 @@ pip install -r requirements.txt
 python data/generate_sample_data.py          # synthetic customers/orders/events
 ```
 
-- **Pipeline A (batch)**: run `snowflake/01_database_setup.sql` through `06_privacy_policies.sql` in order against your Snowflake account, then `aws/s3_setup.md` to automate ingestion via Snowpipe.
+- **Pipeline A (batch)**: run `snowflake/01_database_setup.sql` through `06_privacy_policies.sql` in order against your Snowflake account, then `aws/s3_setup.md` to automate ingestion via the Lambda file-tracker (`aws/lambda/file_tracker.py`) and Snowpipe, both provisioned by `infrastructure/provision_aws.yml`.
 - **Pipeline B (streaming)**: see [streaming/README.md](streaming/README.md).
 - **Pipeline C (governance/ops)**: `monitoring/freshness_checks.sql` + `monitoring/alerting.py`; infra via `infrastructure/provision_aws.yml`.
 
