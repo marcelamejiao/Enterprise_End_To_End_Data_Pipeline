@@ -1,0 +1,5 @@
+faker
+pytest
+snowflake-connector-python
+sqlfluff
+ruff
