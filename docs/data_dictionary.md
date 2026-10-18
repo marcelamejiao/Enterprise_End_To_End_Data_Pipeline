@@ -45,12 +45,31 @@ definitions:
 Operational metadata (not business data): pipeline name, run window, rows
 processed/rejected, status. Owner: Data Engineering. No PII.
 
+## DynamoDB: FileIngestionTracker
+
+Operational metadata, lives outside Snowflake (AWS, written by
+`aws/lambda/file_tracker.py`). Owner: Data Engineering.
+
+| Attribute | Type | Sensitivity | Notes |
+|---|---|---|---|
+| object_key | String (partition key) | Internal | S3 key, e.g. `incoming/orders/orders_2026-01-01.csv` |
+| etag | String (sort key) | Internal | S3 object ETag; distinguishes redeliveries of the same key from a genuinely new version |
+| bucket | String | Internal | |
+| size_bytes | Number | Internal | |
+| first_seen_at | String (ISO timestamp) | Internal | |
+
+No PII — it tracks file deliveries, not record contents.
+
 ## Data deletion workflow
 
 A customer deletion request should:
 1. Delete/redact the row in `RAW_CUSTOMERS` (email/phone/name).
 2. Re-run the Silver views (they're views, so no separate deletion needed there).
-3. Confirm no copies exist in `monitoring/` exports or ad hoc extracts — this
+3. **Check the `quarantine/` S3 prefix** (`aws/lambda/file_tracker.py`): a
+   quarantined file is a full copy of the original upload and may still
+   contain the customer's PII even after step 1 scrubs the warehouse row —
+   delete or re-redact it there too.
+4. Confirm no copies exist in `monitoring/` exports or ad hoc extracts — this
    is a process/audit step, not an automated one in this portfolio project,
    and should be logged in `docs/incident_runbook.md`-style records in a
    real deployment.

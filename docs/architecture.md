@@ -57,8 +57,8 @@ loads.
 | Data quality | `tests/test_silver_data_quality.py`, `snowflake/03_silver_transformations.sql` (`REJECTED_ORDERS`) |
 | Freshness / anomaly detection | `monitoring/freshness_checks.sql` |
 | Alerting | `monitoring/alerting.py` |
-| Auditability | `RAW_ORDERS.SOURCE_FILE`/`INGESTED_AT`, `PIPELINE_RUN_LOG` |
-| Idempotent ingestion | `aws/s3_setup.md` (COPY INTO file tracking), Silver dedup |
+| Auditability | `RAW_ORDERS.SOURCE_FILE`/`INGESTED_AT`, `PIPELINE_RUN_LOG`, DynamoDB `FileIngestionTracker` (every delivery, independent of whether Snowpipe loaded it) |
+| Idempotent ingestion | Lambda dedup-by-ETag (`aws/lambda/file_tracker.py`), COPY INTO file tracking, Silver dedup |
 | Infrastructure as code | `infrastructure/provision_aws.yml` |
 | CI/CD | `.github/workflows/` |
 
