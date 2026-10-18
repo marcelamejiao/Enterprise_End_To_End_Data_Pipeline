@@ -2,7 +2,7 @@
 
 ## Context
 
-This repo demonstrates secure batch and streaming data pipelines, data quality, governance, monitoring, and CI/CD, built to connect existing SQL/Python/ETL/AWS/Ansible skills with Snowflake, Kafka/Kinesis, and Spark — the stack targeted by the job description this project is based on (see the original brief embedded in `Project.md`... this plan supersedes its ad-hoc notes with an ordered build-out).
+This repo demonstrates secure batch and streaming data pipelines, data quality, governance, monitoring, and CI/CD, built to connect existing SQL/Python/ETL/AWS/Ansible skills with Snowflake, Kafka/Kinesis, and Spark — the stack targeted by the job description this project is based on.
 
 ## Approach
 

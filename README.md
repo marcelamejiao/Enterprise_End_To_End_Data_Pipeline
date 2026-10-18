@@ -2,7 +2,7 @@
 
 Portfolio project demonstrating secure batch and streaming data pipelines, data quality, governance, monitoring, and CI/CD on a retail orders use case.
 
-See [PLAN.md](PLAN.md) for the full build plan and [Project.md](Project.md) for the original project brief.
+See [PLAN.md](PLAN.md) for the full build plan.
 
 ## Architecture
 
