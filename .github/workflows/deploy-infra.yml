@@ -1,0 +1,36 @@
+name: Deploy AWS infrastructure
+
+# Manual-only trigger: this provisions real AWS resources, so it never runs
+# automatically on push (see PLAN.md "Cost control").
+on:
+  workflow_dispatch:
+    inputs:
+      bucket_name:
+        description: "S3 bucket name to provision"
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ansible + AWS collection
+        run: |
+          pip install ansible boto3 botocore
+          ansible-galaxy collection install amazon.aws
+
+      - name: Run playbook
+        run: |
+          ansible-playbook infrastructure/provision_aws.yml \
+            -e bucket_name="${{ github.event.inputs.bucket_name }}" \
+            -e snowflake_iam_user_arn="${{ secrets.SNOWFLAKE_IAM_USER_ARN }}" \
+            -e snowflake_external_id="${{ secrets.SNOWFLAKE_EXTERNAL_ID }}"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}

@@ -1,0 +1,36 @@
+name: Lint and test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint SQL
+        run: sqlfluff lint snowflake/ monitoring/*.sql --dialect snowflake
+
+      - name: Lint Python
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest tests/ -v
+        env:
+          # Snowflake-backed tests self-skip without these; Spark-backed
+          # tests run against local[2].
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}

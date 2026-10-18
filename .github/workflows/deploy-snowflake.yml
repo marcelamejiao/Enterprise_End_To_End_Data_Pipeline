@@ -1,0 +1,50 @@
+name: Deploy Snowflake SQL
+
+# NOTE: schemachange expects versioned filenames (e.g. V1.1__description.sql).
+# The files in snowflake/ use plain numeric prefixes for readability as a
+# portfolio artifact; rename to schemachange's convention before relying on
+# this workflow, or swap in a simpler `snowsql -f` loop over the files in order.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "snowflake/**"
+      - "monitoring/*.sql"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install schemachange
+        run: pip install schemachange
+
+      - name: Apply Snowflake SQL files in order
+        run: |
+          schemachange deploy \
+            --root-folder snowflake \
+            --snowflake-account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
+            --snowflake-user "${{ secrets.SNOWFLAKE_USER }}" \
+            --snowflake-role "${{ secrets.SNOWFLAKE_DEPLOY_ROLE }}" \
+            --snowflake-warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}" \
+            --snowflake-database RETAIL_DWH
+        env:
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+
+      - name: Apply monitoring views
+        run: |
+          schemachange deploy \
+            --root-folder monitoring \
+            --snowflake-account "${{ secrets.SNOWFLAKE_ACCOUNT }}" \
+            --snowflake-user "${{ secrets.SNOWFLAKE_USER }}" \
+            --snowflake-role "${{ secrets.SNOWFLAKE_DEPLOY_ROLE }}" \
+            --snowflake-warehouse "${{ secrets.SNOWFLAKE_WAREHOUSE }}" \
+            --snowflake-database RETAIL_DWH
+        env:
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}

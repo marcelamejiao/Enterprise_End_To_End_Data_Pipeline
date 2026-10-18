@@ -1,0 +1,46 @@
+name: Streaming CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "streaming/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run dedup/validation unit tests (local Spark, no Kafka needed)
+        run: pytest tests/test_streaming_dedup.py -v
+
+      - name: Start local Kafka
+        run: docker compose -f streaming/docker-compose.yml up -d
+
+      - name: Wait for Kafka to be ready
+        run: |
+          for i in $(seq 1 30); do
+            docker exec $(docker ps -qf "name=kafka") \
+              kafka-topics --bootstrap-server localhost:9092 --list && break
+            sleep 2
+          done
+
+      - name: Smoke-test the producer against local Kafka
+        run: timeout 15 python streaming/event_producer.py --rate 10 --duration 10 || true
+
+      - name: Tear down Kafka
+        if: always()
+        run: docker compose -f streaming/docker-compose.yml down -v

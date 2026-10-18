@@ -27,6 +27,19 @@ Details in [docs/architecture.md](docs/architecture.md) (added as the project is
 └── .github/workflows/ # CI/CD
 ```
 
+## Getting started
+
+```
+pip install -r requirements.txt
+python data/generate_sample_data.py          # synthetic customers/orders/events
+```
+
+- **Pipeline A (batch)**: run `snowflake/01_database_setup.sql` through `06_privacy_policies.sql` in order against your Snowflake account, then `aws/s3_setup.md` to automate ingestion via Snowpipe.
+- **Pipeline B (streaming)**: see [streaming/README.md](streaming/README.md).
+- **Pipeline C (governance/ops)**: `monitoring/freshness_checks.sql` + `monitoring/alerting.py`; infra via `infrastructure/provision_aws.yml`.
+
+Tests: `pytest tests/` (Snowflake-backed tests self-skip without credentials; streaming dedup tests run locally against `local[2]` Spark).
+
 ## Status
 
-Scaffolding in progress — see [PLAN.md](PLAN.md) for build order and current phase.
+All three pipelines scaffolded end-to-end: Pipeline A (Snowflake medallion architecture + Snowpipe), Pipeline B (Kafka + Spark Structured Streaming with checkpointing/dedup), and Pipeline C (masking, RBAC, monitoring, alerting, Ansible, GitHub Actions CI/CD). See [PLAN.md](PLAN.md) for the full build plan and [docs/architecture.md](docs/architecture.md) for the detailed design.
