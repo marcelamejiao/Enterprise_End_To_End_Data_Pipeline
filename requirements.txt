@@ -6,3 +6,5 @@ ruff
 kafka-python
 pyspark
 delta-spark
+boto3
+moto

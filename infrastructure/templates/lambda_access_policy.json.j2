@@ -1,0 +1,15 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": ["dynamodb:PutItem", "dynamodb:GetItem"],
+            "Resource": "arn:aws:dynamodb:*:*:table/FileIngestionTracker"
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["s3:GetObject", "s3:CopyObject", "s3:PutObject"],
+            "Resource": "arn:aws:s3:::{{ bucket_name }}/*"
+        }
+    ]
+}

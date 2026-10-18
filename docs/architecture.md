@@ -13,12 +13,16 @@ loads.
                       ┌─────────────────────┐
   CSV/JSON files ───▶ │   S3 incoming/       │
                       └─────────┬────────────┘
-                                │ event notification
-                                ▼
-                      ┌─────────────────────┐
-                      │   Snowpipe           │  (Pipeline A)
-                      └─────────┬────────────┘
-                                ▼
+                     event notification (fires both, independently)
+                         ┌──────┴──────┐
+                         ▼             ▼
+               ┌──────────────┐ ┌─────────────────────┐
+               │ Lambda        │ │   Snowpipe           │  (Pipeline A)
+               │ file_tracker  │ └─────────┬────────────┘
+               │ (dedup/       │           │
+               │  quarantine,  │           │
+               │  DynamoDB)    │           │
+               └──────────────┘            ▼
   Kafka order_events ──▶ Spark Structured    ┌─────────────────────┐
   (Pipeline B)           Streaming ─────────▶│  BRONZE (raw)        │
                                               └─────────┬────────────┘
@@ -38,6 +42,7 @@ loads.
 
 ## Medallion layers
 
+- **Lambda file tracking** (`aws/lambda/file_tracker.py`): fires on the same S3 `ObjectCreated` event as Snowpipe, independently. Records every delivery in DynamoDB keyed by object key + ETag (duplicate detection), quarantines files that fail basic validation (bad extension, zero bytes) to `quarantine/` before they'd otherwise reach Snowflake. See `aws/s3_setup.md`.
 - **Bronze** (`snowflake/01_database_setup.sql`, `02_bronze_ingestion.sql`): raw landing tables, append-only, source filename + ingestion timestamp retained for lineage.
 - **Silver** (`snowflake/03_silver_transformations.sql`): deduplicated views (`CLEAN_ORDERS`, `CUSTOMERS`), masking applied at the base-table level, rejected rows visible via `REJECTED_ORDERS` rather than silently dropped.
 - **Gold** (`snowflake/04_gold_metrics.sql`): business metrics as Dynamic Tables (`DAILY_SALES`, `CUSTOMER_SEGMENTS`), refreshed on a `TARGET_LAG`.

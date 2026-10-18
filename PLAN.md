@@ -23,6 +23,7 @@ Build three pipelines in sequence, each de-risking the next, using a retail orde
   5. Streams & Tasks CDC variant (`ORDER_CHANGES` stream + `PROCESS_ORDER_CHANGES` task)
   6. Privacy policies (email/phone masking policy)
 - `aws/s3_setup.md`: S3 bucket with `incoming/` prefix, storage integration, Snowpipe auto-ingest config.
+- `aws/lambda/file_tracker.py`: Lambda triggered on the same S3 event as Snowpipe (independently) — tracks every file delivery in DynamoDB, detects duplicates by ETag, quarantines invalid files.
 - `tests/`: pytest + `snowflake-connector-python` assertions (row counts, nulls, uniqueness, referential integrity).
 - Demo path: upload CSV to S3 → Snowpipe lands in Bronze → Dynamic Table refreshes Gold → query revenue-by-day.
 
@@ -62,6 +63,7 @@ Branch protection on `main`, feature branches + PRs for every change, so the git
 - `deploy-infra.yml` gated to manual dispatch so Actions never silently incurs AWS charges on push.
 
 ## Critical files
+- `aws/lambda/file_tracker.py` — S3-triggered file tracking/dedup/quarantine Lambda
 - `snowflake/01_database_setup.sql` … `06_privacy_policies.sql` — core warehouse logic
 - `streaming/spark_consumer.py` and a Kafka producer script
 - `data/generate_sample_data.py` — Faker-based synthetic data generator
