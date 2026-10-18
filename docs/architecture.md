@@ -1,0 +1,61 @@
+# Architecture
+
+## Business scenario
+
+A retailer needs reliable daily sales reports and near-real-time order
+monitoring, without exposing customer emails/phones to every analyst, and
+with visibility into missing records, duplicates, stale data, and failed
+loads.
+
+## Data flow
+
+```
+                      ┌─────────────────────┐
+  CSV/JSON files ───▶ │   S3 incoming/       │
+                      └─────────┬────────────┘
+                                │ event notification
+                                ▼
+                      ┌─────────────────────┐
+                      │   Snowpipe           │  (Pipeline A)
+                      └─────────┬────────────┘
+                                ▼
+  Kafka order_events ──▶ Spark Structured    ┌─────────────────────┐
+  (Pipeline B)           Streaming ─────────▶│  BRONZE (raw)        │
+                                              └─────────┬────────────┘
+                                                        ▼
+                                              ┌─────────────────────┐
+                                              │  SILVER (clean,      │
+                                              │  deduped, masked)    │
+                                              └─────────┬────────────┘
+                                                        ▼
+                                              ┌─────────────────────┐
+                                              │  GOLD (Dynamic       │
+                                              │  Tables: metrics)    │
+                                              └─────────┬────────────┘
+                                                        ▼
+                                           Power BI / SQL analytics
+```
+
+## Medallion layers
+
+- **Bronze** (`snowflake/01_database_setup.sql`, `02_bronze_ingestion.sql`): raw landing tables, append-only, source filename + ingestion timestamp retained for lineage.
+- **Silver** (`snowflake/03_silver_transformations.sql`): deduplicated views (`CLEAN_ORDERS`, `CUSTOMERS`), masking applied at the base-table level, rejected rows visible via `REJECTED_ORDERS` rather than silently dropped.
+- **Gold** (`snowflake/04_gold_metrics.sql`): business metrics as Dynamic Tables (`DAILY_SALES`, `CUSTOMER_SEGMENTS`), refreshed on a `TARGET_LAG`.
+- **CDC variant** (`snowflake/05_streams_tasks.sql`): Streams + Tasks demonstrate the procedural alternative to Dynamic Tables for an audit trail.
+
+## Cross-cutting controls
+
+| Control | Where |
+|---|---|
+| Least-privilege access | `snowflake/06_privacy_policies.sql` (INGEST/TRANSFORM/ANALYST/PII_ACCESS roles) |
+| PII masking | `snowflake/06_privacy_policies.sql` (email/phone masking policies) |
+| Data quality | `tests/test_silver_data_quality.py`, `snowflake/03_silver_transformations.sql` (`REJECTED_ORDERS`) |
+| Freshness / anomaly detection | `monitoring/freshness_checks.sql` |
+| Alerting | `monitoring/alerting.py` |
+| Auditability | `RAW_ORDERS.SOURCE_FILE`/`INGESTED_AT`, `PIPELINE_RUN_LOG` |
+| Idempotent ingestion | `aws/s3_setup.md` (COPY INTO file tracking), Silver dedup |
+| Infrastructure as code | `infrastructure/provision_aws.yml` |
+| CI/CD | `.github/workflows/` |
+
+See `docs/data_dictionary.md` for table-level ownership/sensitivity and
+`docs/incident_runbook.md` for what to do when something breaks.

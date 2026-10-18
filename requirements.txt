@@ -3,3 +3,6 @@ pytest
 snowflake-connector-python
 sqlfluff
 ruff
+kafka-python
+pyspark
+delta-spark
