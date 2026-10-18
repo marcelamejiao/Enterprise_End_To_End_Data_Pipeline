@@ -39,12 +39,19 @@
         - orders
         - customers
 
-    - name: Create IAM role trusted by Snowflake's storage integration
+    # Always created, even on the first run before snowflake_iam_user_arn is
+    # known: Snowflake's CREATE STORAGE INTEGRATION needs a real role ARN to
+    # point at, but only tells you the IAM user ARN/external ID to trust
+    # *after* that integration exists (via DESC INTEGRATION). So pass 1
+    # creates this role with a deny-all placeholder trust policy just so the
+    # ARN exists; re-run this playbook with -e snowflake_iam_user_arn=...
+    # -e snowflake_external_id=... (from DESC INTEGRATION) to tighten it to
+    # the real trust relationship.
+    - name: Create/update IAM role for Snowflake's storage integration
       amazon.aws.iam_role:
         name: snowflake-retail-role
         assume_role_policy_document: "{{ lookup('template', 'templates/snowflake_trust_policy.json.j2') }}"
         state: present
-      when: snowflake_iam_user_arn != ''
 
     - name: Attach read-only policy scoped to the bucket prefix
       amazon.aws.iam_policy:
@@ -53,7 +60,6 @@
         policy_name: snowflake-s3-read
         policy_json: "{{ lookup('template', 'templates/snowflake_s3_policy.json.j2') }}"
         state: present
-      when: snowflake_iam_user_arn != ''
 
     - name: Create DynamoDB table for file delivery tracking
       amazon.aws.dynamodb_table:

@@ -1,3 +1,4 @@
+{% if snowflake_iam_user_arn %}
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -15,3 +16,15 @@
         }
     ]
 }
+{% else %}
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Deny",
+            "Principal": { "AWS": "*" },
+            "Action": "sts:AssumeRole"
+        }
+    ]
+}
+{% endif %}
