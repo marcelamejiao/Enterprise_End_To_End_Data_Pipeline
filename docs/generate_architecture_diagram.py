@@ -1,11 +1,13 @@
-"""Generate docs/architecture.svg for the Enterprise End-to-End Data
+"""Generate docs/img/architecture.svg for the Enterprise End-to-End Data
 Pipeline portfolio project. Pure stdlib, no deps.
 
 Usage:
     python docs/generate_architecture_diagram.py
     # then rasterize to PNG, e.g.:
-    npx -y resvg-cli --fit-zoom 2.4 docs/architecture.svg docs/architecture.png
+    npx -y resvg-cli --fit-zoom 2.4 docs/img/architecture.svg docs/img/architecture.png
 """
+
+import os
 
 FONT = "Liberation Sans, DejaVu Sans, sans-serif"
 
@@ -282,7 +284,8 @@ parts.append(
 
 svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">{defs}{"".join(parts)}</svg>'
 
-with open("docs/architecture.svg", "w") as f:
+os.makedirs("docs/img", exist_ok=True)
+with open("docs/img/architecture.svg", "w") as f:
     f.write(svg)
 
-print("wrote docs/architecture.svg", len(svg), "bytes")
+print("wrote docs/img/architecture.svg", len(svg), "bytes")
