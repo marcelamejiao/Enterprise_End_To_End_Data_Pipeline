@@ -62,7 +62,7 @@
         state: present
 
     - name: Create DynamoDB table for file delivery tracking
-      amazon.aws.dynamodb_table:
+      community.aws.dynamodb_table:
         name: FileIngestionTracker
         hash_key_name: object_key
         hash_key_type: STRING
@@ -117,7 +117,7 @@
         source_arn: "arn:aws:s3:::{{ bucket_name }}"
 
     - name: Wire the S3 bucket's event notification to the Lambda
-      amazon.aws.s3_bucket_notification:
+      community.aws.s3_bucket_notification:
         bucket: "{{ bucket_name }}"
         event_name: incoming-file-tracker
         lambda_function_arn: "arn:aws:lambda:{{ lookup('env', 'AWS_DEFAULT_REGION') | default('us-east-1', true) }}:{{ lambda_role.iam_role.arn.split(':')[4] }}:function:retail-file-tracker"
