@@ -61,7 +61,7 @@ required no matter which path you took.
 #### Path B — AWS automation, needs an AWS account
 
 - Make sure you've already run `snowflake/01_database_setup.sql` (step 2 above) — required before this path too.
-- Follow [aws/s3_setup.md](aws/s3_setup.md) steps 1–4: provision the bucket/Lambda/DynamoDB table, create the Snowflake storage integration (note: this is a two-pass IAM trust setup — the doc explains why), create the stage/pipe (Part 2 of `02_bronze_ingestion.sql`), and wire Snowpipe's own S3 notification.
+- Follow [aws/s3_setup.md](aws/s3_setup.md) steps 1–4: provision the bucket/Lambda/DynamoDB table, create the Snowflake storage integration (tightening its IAM trust policy is a two-pass step — the doc explains why), create the stage/pipe (Part 2 of `02_bronze_ingestion.sql`), and re-run the playbook a third time to wire Snowpipe's own S3 notification — the whole thing is provisioned by Ansible, no manual console steps.
 - Verify by uploading a file and checking both Snowflake and DynamoDB, per step 4 in that doc.
 - Done with ingestion — continue at step 3 below.
 

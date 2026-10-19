@@ -70,7 +70,7 @@ ansible-playbook infrastructure/provision_aws.yml \
     -e snowflake_external_id='<STORAGE_AWS_EXTERNAL_ID>'
 ```
 
-## 3. Create the stage and pipe, then wire Snowpipe's S3 notification
+## 3. Create the stage and pipe, then wire Snowpipe's S3 notification (pass 3)
 
 Run `snowflake/02_bronze_ingestion.sql`'s stage/pipe statements (uncomment
 the `CREATE STAGE`/storage-integration lines, now that the integration
@@ -83,23 +83,25 @@ SHOW PIPES LIKE 'ORDERS_PIPE' IN SCHEMA RETAIL_DWH.BRONZE;
 -- read notification_channel (the SQS queue ARN) from the output
 ```
 
-In the S3 console, add an event notification scoped to `incoming/orders/`
-targeting that SQS queue:
+Re-run the playbook a third time with that value to wire the bucket's
+`incoming/orders/` notification to Snowpipe's queue:
 
-1. S3 console → open your bucket → **Properties** tab → scroll to
-   **Event notifications** → **Create event notification**.
-2. Name it (e.g. `snowpipe-orders-notification`).
-3. **Prefix**: `incoming/orders/` (not `incoming/` — this must stay
-   disjoint from the Lambda's `incoming/ingest/` notification, see above).
-4. **Event types**: check **All object create events** (`s3:ObjectCreated:*`).
-5. **Destination**: **SQS queue** → **Enter SQS queue ARN** → paste the
-   `notification_channel` value from `SHOW PIPES` above.
-6. **Save changes**.
+```
+ansible-playbook infrastructure/provision_aws.yml \
+    -e bucket_name=<your-bucket>-retail-orders \
+    -e snowflake_iam_user_arn='<STORAGE_AWS_IAM_USER_ARN>' \
+    -e snowflake_external_id='<STORAGE_AWS_EXTERNAL_ID>' \
+    -e snowflake_sqs_queue_arn='<notification_channel from SHOW PIPES>'
+```
 
-No extra IAM permissions are needed for this step — Snowflake's
-auto-provisioned SQS queue already has a resource policy permitting S3 to
-send it messages, set up automatically when the storage integration was
-created.
+(Keep passing the pass-2 values too — omitting them would revert the
+Snowflake trust policy back to its deny-all placeholder.) No extra IAM
+permissions are needed for this task — Snowflake's auto-provisioned SQS
+queue already has a resource policy permitting S3 to send it messages, set
+up automatically when the storage integration was created. The
+`incoming/orders/` prefix here stays disjoint from the Lambda's
+`incoming/ingest/` notification, so the two never hit S3's
+overlapping-rules restriction (see above).
 
 If a file lands directly in `incoming/orders/` (bypassing the Lambda
 entirely, which shouldn't normally happen — uploads are meant to go to

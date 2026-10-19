@@ -1,7 +1,22 @@
 ---
 # Idempotent provisioning of the S3 bucket + IAM role used by Snowpipe
-# (see aws/s3_setup.md). Run via:
-#   ansible-playbook infrastructure/provision_aws.yml -e bucket_name=<your-bucket>-retail-orders
+# (see aws/s3_setup.md). Everything in AWS is created here - nothing is set
+# up by hand in the console except the one-time IAM permission grants on the
+# operator's own AWS user. Three passes, each needing a value only the
+# previous pass (or Snowflake) produces:
+#
+#   1) ansible-playbook infrastructure/provision_aws.yml -e bucket_name=<your-bucket>-retail-orders
+#      Creates the bucket/prefixes, DynamoDB table, Lambda, and the
+#      snowflake-retail-role IAM role with a deny-all placeholder trust
+#      policy (its real ARN has to exist before Snowflake's CREATE STORAGE
+#      INTEGRATION can reference it).
+#   2) Create the storage integration in Snowflake, run DESC INTEGRATION,
+#      then re-run with -e snowflake_iam_user_arn=... -e
+#      snowflake_external_id=... to tighten that role's trust policy.
+#   3) Create the stage/pipe in Snowflake, run SHOW PIPES to read
+#      notification_channel (the SQS queue ARN Snowflake auto-provisioned),
+#      then re-run with -e snowflake_sqs_queue_arn=... to wire the bucket's
+#      incoming/orders/ notification to it.
 #
 # Requires community.aws collection and AWS credentials in the environment
 # (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION), never
@@ -143,3 +158,21 @@
           - s3:ObjectCreated:*
         prefix: "incoming/ingest/"
         state: present
+
+    # Only runnable once Snowflake's pipe exists and -e
+    # snowflake_sqs_queue_arn=... (from SHOW PIPES' notification_channel
+    # column) is passed - skipped entirely otherwise, same two-pass pattern
+    # as the Snowflake trust policy above. Scoped to incoming/orders/, which
+    # is disjoint from the Lambda's incoming/ingest/ notification above, so
+    # the two never hit S3's overlapping-rules restriction.
+    - name: Wire the S3 bucket's event notification to Snowpipe's SQS queue
+      community.aws.s3_bucket_notification:
+        bucket_name: "{{ bucket_name }}"
+        region: "{{ aws_region }}"
+        event_name: snowpipe-orders-notification
+        queue_arn: "{{ snowflake_sqs_queue_arn }}"
+        events:
+          - s3:ObjectCreated:*
+        prefix: "incoming/orders/"
+        state: present
+      when: snowflake_sqs_queue_arn | default('') != ''
