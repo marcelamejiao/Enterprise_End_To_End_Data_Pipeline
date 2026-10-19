@@ -52,7 +52,7 @@ Operational metadata, lives outside Snowflake (AWS, written by
 
 | Attribute | Type | Sensitivity | Notes |
 |---|---|---|---|
-| object_key | String (partition key) | Internal | S3 key, e.g. `incoming/orders/orders_2026-01-01.csv` |
+| object_key | String (partition key) | Internal | Original `incoming/ingest/` S3 key the file was uploaded under, e.g. `incoming/ingest/orders_2026-01-01.csv` — not where it ended up after the Lambda routed it to `incoming/orders/` or `incoming/customers/` |
 | etag | String (sort key) | Internal | S3 object ETag; distinguishes redeliveries of the same key from a genuinely new version |
 | bucket | String | Internal | |
 | size_bytes | Number | Internal | |
@@ -65,10 +65,11 @@ No PII — it tracks file deliveries, not record contents.
 A customer deletion request should:
 1. Delete/redact the row in `RAW_CUSTOMERS` (email/phone/name).
 2. Re-run the Silver views (they're views, so no separate deletion needed there).
-3. **Check the `quarantine/` S3 prefix** (`aws/lambda/file_tracker.py`): a
-   quarantined file is a full copy of the original upload and may still
-   contain the customer's PII even after step 1 scrubs the warehouse row —
-   delete or re-redact it there too.
+3. **Check the `quarantine/`, `incoming/customers/`, and `incoming/ingest/`
+   S3 prefixes** (`aws/lambda/file_tracker.py`): any customer file that was
+   quarantined, routed, or (rarely) still sitting unrouted may still contain
+   the customer's PII even after step 1 scrubs the warehouse row — delete
+   or re-redact it in whichever of these it landed in.
 4. Confirm no copies exist in `monitoring/` exports or ad hoc extracts — this
    is a process/audit step, not an automated one in this portfolio project,
    and should be logged in `docs/incident_runbook.md`-style records in a

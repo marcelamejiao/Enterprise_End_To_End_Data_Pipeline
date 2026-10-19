@@ -149,29 +149,37 @@ section_label(90, 112, "Pipeline A — Batch ingestion", color="#1d4ed8")
 files = box(90, 130, 300, 60, "CSV / JSON files",
             ["customers, orders"], fill="#eff6ff", stroke="#93c5fd")
 
-s3 = box(90, 225, 300, 65, "S3  incoming/",
-         ["orders/, customers/ prefixes"], fill="#dbeafe", stroke="#2563eb")
+s3_ingest = box(90, 225, 670, 55, "S3  incoming/ingest/",
+                ["upload here — staging only, Lambda-watched"],
+                fill="#dbeafe", stroke="#2563eb")
 
-lambda_box = box(90, 330, 320, 90, "Lambda: file_tracker",
-                  ["ETag dedup + validation,", "quarantines invalid files"],
+lambda_box = box(90, 320, 670, 80, "Lambda: file_tracker",
+                  ["validate + dedup by ETag (DynamoDB), classify by content,",
+                   "then move to orders/ or customers/ (or quarantine/)"],
                   fill="#eff6ff", stroke="#2563eb")
 
-snowpipe = box(440, 330, 320, 70, "Snowpipe",
-                ["auto-ingest, SQS-triggered"], fill="#dbeafe", stroke="#2563eb")
-
-dynamo = box(90, 450, 150, 60, "DynamoDB",
+dynamo = box(90, 440, 150, 60, "DynamoDB",
              ["FileIngestionTracker"], fill="#f8fafc", stroke="#94a3b8",
-             title_size=13, text_size=11)
+             title_size=12, text_size=10.5)
 
-quarantine = box(260, 450, 150, 60, "S3  quarantine/",
-                  ["invalid files"], fill="#fef2f2", stroke="#fca5a5",
-                  title_size=13, text_size=11)
+orders_box = box(255, 440, 160, 60, "S3  incoming/orders/",
+                  ["Snowpipe watches this"], fill="#dbeafe", stroke="#2563eb",
+                  title_size=12, text_size=10.5)
 
-arrow(center_bottom(files), center_top(s3))
-arrow(center_bottom(s3, 0.25), center_top(lambda_box, 0.3), label="ObjectCreated")
-arrow(center_bottom(s3, 0.75), center_top(snowpipe, 0.5), label="ObjectCreated")
-arrow(center_bottom(lambda_box, 0.25), center_top(dynamo, 0.5))
-arrow(center_bottom(lambda_box, 0.75), center_top(quarantine, 0.5))
+customers_box = box(430, 440, 160, 60, "S3  incoming/customers/",
+                     ["no auto-ingest yet"], fill="#dbeafe", stroke="#2563eb",
+                     title_size=12, text_size=10.5)
+
+quarantine = box(605, 440, 155, 60, "S3  quarantine/",
+                  ["invalid / unclassified"], fill="#fef2f2", stroke="#fca5a5",
+                  title_size=12, text_size=10.5)
+
+arrow(center_bottom(files), center_top(s3_ingest))
+arrow(center_bottom(s3_ingest), center_top(lambda_box), label="ObjectCreated")
+arrow(center_bottom(lambda_box, 0.12), center_top(dynamo, 0.5), dashed=True)
+arrow(center_bottom(lambda_box, 0.38), center_top(orders_box, 0.5), label="move")
+arrow(center_bottom(lambda_box, 0.62), center_top(customers_box, 0.5), label="move")
+arrow(center_bottom(lambda_box, 0.88), center_top(quarantine, 0.5), dashed=True)
 
 # ---------------------------------------------------------------------------
 # Pipeline B (x860-1610)
@@ -200,7 +208,7 @@ bronze = box(90, 550, 1520, 85, "BRONZE   (RETAIL_DWH.BRONZE)",
              ["RAW_ORDERS, RAW_CUSTOMERS — source_file + ingested_at retained for lineage"],
              fill="#fef3c7", stroke="#b45309", title_size=16)
 
-arrow(center_bottom(snowpipe), (center_bottom(snowpipe)[0], 550), label="COPY INTO")
+arrow(center_bottom(orders_box), (center_bottom(orders_box)[0], 550), label="Snowpipe COPY INTO")
 arrow(center_bottom(spark), (center_bottom(spark)[0], 550))
 
 silver = box(90, 685, 1200, 90, "SILVER   (RETAIL_DWH.SILVER)",

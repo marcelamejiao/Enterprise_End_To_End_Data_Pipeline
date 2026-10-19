@@ -31,13 +31,14 @@
           ignore_public_acls: true
           restrict_public_buckets: true
 
-    - name: Create incoming/orders and incoming/customers prefixes
+    - name: Create incoming/ingest, incoming/orders, and incoming/customers prefixes
       amazon.aws.s3_object:
         bucket: "{{ bucket_name }}"
         mode: put
         src: /dev/null
         object: "incoming/{{ item }}/"
       loop:
+        - ingest
         - orders
         - customers
 
@@ -111,6 +112,8 @@
         environment_variables:
           TRACKER_TABLE_NAME: FileIngestionTracker
           QUARANTINE_PREFIX: "quarantine/"
+          ORDERS_PREFIX: "incoming/orders/"
+          CUSTOMERS_PREFIX: "incoming/customers/"
       register: file_tracker_lambda
 
     - name: Allow S3 to invoke the Lambda function
@@ -123,6 +126,13 @@
         principal: s3.amazonaws.com
         source_arn: "arn:aws:s3:::{{ bucket_name }}"
 
+    # Scoped to incoming/ingest/ only - not the whole incoming/ prefix - for
+    # two reasons: (1) it must not overlap with Snowpipe's own notification
+    # on incoming/orders/ (set up separately, see aws/s3_setup.md), since S3
+    # rejects overlapping prefix/event rules even across different
+    # destination types; (2) it must not fire again when this same Lambda
+    # moves a validated file into incoming/orders/ or incoming/customers/,
+    # which would otherwise re-trigger itself on its own writes.
     - name: Wire the S3 bucket's event notification to the Lambda
       community.aws.s3_bucket_notification:
         bucket_name: "{{ bucket_name }}"
@@ -131,5 +141,5 @@
         lambda_function_arn: "{{ file_tracker_lambda.configuration.function_arn }}"
         events:
           - s3:ObjectCreated:*
-        prefix: "incoming/"
+        prefix: "incoming/ingest/"
         state: present

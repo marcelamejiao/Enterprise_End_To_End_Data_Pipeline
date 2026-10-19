@@ -20,38 +20,49 @@ Text equivalent:
 
 ```
                       ┌─────────────────────┐
-  CSV/JSON files ───▶ │   S3 incoming/       │
+  CSV/JSON files ───▶ │ S3 incoming/ingest/  │
                       └─────────┬────────────┘
-                     event notification (fires both, independently)
-                         ┌──────┴──────┐
-                         ▼             ▼
-               ┌──────────────┐ ┌─────────────────────┐
-               │ Lambda        │ │   Snowpipe           │  (Pipeline A)
-               │ file_tracker  │ └─────────┬────────────┘
-               │ (dedup/       │           │
-               │  quarantine,  │           │
-               │  DynamoDB)    │           │
-               └──────────────┘            ▼
-  Kafka order_events ──▶ Spark Structured    ┌─────────────────────┐
-  (Pipeline B)           Streaming ─────────▶│  BRONZE (raw)        │
-                                              └─────────┬────────────┘
-                                                        ▼
-                                              ┌─────────────────────┐
-                                              │  SILVER (clean,      │
-                                              │  deduped, masked)    │
-                                              └─────────┬────────────┘
-                                                        ▼
-                                              ┌─────────────────────┐
-                                              │  GOLD (Dynamic       │
-                                              │  Tables: metrics)    │
-                                              └─────────┬────────────┘
-                                                        ▼
-                                           Power BI / SQL analytics
+                                │ event notification
+                                ▼
+                      ┌─────────────────────┐
+                      │ Lambda file_tracker   │  validate, classify,
+                      │ (dedup, quarantine,   │  DynamoDB-track, then
+                      │  DynamoDB)            │  move (not copy)
+                      └────┬─────────────┬────┘
+                           ▼             ▼
+               ┌─────────────────┐ ┌─────────────────────┐
+               │ incoming/        │ │ incoming/            │
+               │ customers/       │ │ orders/              │  (Pipeline A)
+               └─────────────────┘ └─────────┬────────────┘
+                                   event notification (separate,
+                                   disjoint prefix - see aws/s3_setup.md)
+                                              ▼
+                                    ┌─────────────────────┐
+                                    │   Snowpipe           │
+                                    └─────────┬────────────┘
+  Kafka order_events ──▶ Spark Structured      │
+  (Pipeline B)           Streaming ───────────▶│
+                                                ▼
+                                      ┌─────────────────────┐
+                                      │  BRONZE (raw)        │
+                                      └─────────┬────────────┘
+                                                ▼
+                                      ┌─────────────────────┐
+                                      │  SILVER (clean,      │
+                                      │  deduped, masked)    │
+                                      └─────────┬────────────┘
+                                                ▼
+                                      ┌─────────────────────┐
+                                      │  GOLD (Dynamic       │
+                                      │  Tables: metrics)    │
+                                      └─────────┬────────────┘
+                                                ▼
+                                   Power BI / SQL analytics
 ```
 
 ## Medallion layers
 
-- **Lambda file tracking** (`aws/lambda/file_tracker.py`): fires on the same S3 `ObjectCreated` event as Snowpipe, independently. Records every delivery in DynamoDB keyed by object key + ETag (duplicate detection), quarantines files that fail basic validation (bad extension, zero bytes) to `quarantine/` before they'd otherwise reach Snowflake. See `aws/s3_setup.md`.
+- **Lambda file tracking/routing** (`aws/lambda/file_tracker.py`): the only thing watching `incoming/ingest/`. Records every delivery in DynamoDB keyed by object key + ETag (duplicate detection) before touching the file, quarantines anything that fails basic validation (bad extension, zero bytes) or can't be classified, and for everything else, peeks at the header/content to tell orders from customers data and moves it to `incoming/orders/` or `incoming/customers/`. Snowpipe's own notification only watches `incoming/orders/`, never `incoming/ingest/` - keeping the two notifications on disjoint prefixes avoids S3's restriction on overlapping notification rules. See `aws/s3_setup.md`.
 - **Bronze** (`snowflake/01_database_setup.sql`, `02_bronze_ingestion.sql`): raw landing tables, append-only, source filename + ingestion timestamp retained for lineage.
 - **Silver** (`snowflake/03_silver_transformations.sql`): deduplicated views (`CLEAN_ORDERS`, `CUSTOMERS`), masking applied at the base-table level, rejected rows visible via `REJECTED_ORDERS` rather than silently dropped.
 - **Gold** (`snowflake/04_gold_metrics.sql`): business metrics as Dynamic Tables (`DAILY_SALES`, `CUSTOMER_SEGMENTS`), refreshed on a `TARGET_LAG`.
