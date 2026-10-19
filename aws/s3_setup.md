@@ -69,6 +69,31 @@ add a second event notification on the same bucket/prefix — `ObjectCreated:*`
 on `incoming/` — targeting that SQS queue. This is separate from, and
 doesn't replace, the Lambda trigger step 1 already configured.
 
+Console steps:
+
+1. S3 console → open your bucket → **Properties** tab → scroll to
+   **Event notifications** → **Create event notification**.
+2. Name it (e.g. `snowpipe-orders-notification`).
+3. **Prefix**: `incoming/`.
+4. **Event types**: check **All object create events** (`s3:ObjectCreated:*`).
+5. **Destination**: **SQS queue** → **Enter SQS queue ARN** → paste the
+   `notification_channel` value from `SHOW PIPES` above.
+6. **Save changes**.
+
+No extra IAM permissions are needed for this step — Snowflake's
+auto-provisioned SQS queue already has a resource policy permitting S3 to
+send it messages, set up automatically when the storage integration was
+created.
+
+If you upload a file *before* this notification exists, Snowpipe never
+hears about it (S3 notifications only fire on new writes, not
+retroactively). Check for this with
+`SELECT * FROM TABLE(INFORMATION_SCHEMA.COPY_HISTORY(TABLE_NAME =>
+'RETAIL_DWH.BRONZE.RAW_ORDERS', START_TIME => DATEADD(hours, -2,
+CURRENT_TIMESTAMP())));` — if it's empty, the pipe was never notified.
+Backfill with `ALTER PIPE RETAIL_DWH.BRONZE.ORDERS_PIPE REFRESH;`, which
+scans the stage directly and bypasses the notification mechanism.
+
 ## Idempotency note
 
 S3 delivers notifications **at least once**. `COPY INTO` is naturally
