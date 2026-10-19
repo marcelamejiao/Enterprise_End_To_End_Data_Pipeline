@@ -14,8 +14,6 @@
 
   vars:
     bucket_name: "{{ bucket_name }}"
-    snowflake_iam_user_arn: "{{ snowflake_iam_user_arn | default('') }}"
-    snowflake_external_id: "{{ snowflake_external_id | default('') }}"
 
   tasks:
     - name: Create S3 bucket for incoming order/customer files
@@ -51,6 +49,7 @@
       amazon.aws.iam_role:
         name: snowflake-retail-role
         assume_role_policy_document: "{{ lookup('template', 'templates/snowflake_trust_policy.json.j2') }}"
+        create_instance_profile: false
         state: present
 
     - name: Attach read-only policy scoped to the bucket prefix
@@ -77,6 +76,7 @@
         assume_role_policy_document: "{{ lookup('template', 'templates/lambda_trust_policy.json.j2') }}"
         managed_policies:
           - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        create_instance_profile: false
         state: present
       register: lambda_role
 
@@ -118,7 +118,7 @@
 
     - name: Wire the S3 bucket's event notification to the Lambda
       community.aws.s3_bucket_notification:
-        bucket: "{{ bucket_name }}"
+        bucket_name: "{{ bucket_name }}"
         event_name: incoming-file-tracker
         lambda_function_arn: "arn:aws:lambda:{{ lookup('env', 'AWS_DEFAULT_REGION') | default('us-east-1', true) }}:{{ lambda_role.iam_role.arn.split(':')[4] }}:function:retail-file-tracker"
         events:

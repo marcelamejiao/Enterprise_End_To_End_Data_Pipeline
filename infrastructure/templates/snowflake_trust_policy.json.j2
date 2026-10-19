@@ -1,4 +1,4 @@
-{% if snowflake_iam_user_arn %}
+{% if snowflake_iam_user_arn | default('') %}
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -10,7 +10,7 @@
             "Action": "sts:AssumeRole",
             "Condition": {
                 "StringEquals": {
-                    "sts:ExternalId": "{{ snowflake_external_id }}"
+                    "sts:ExternalId": "{{ snowflake_external_id | default('') }}"
                 }
             }
         }
