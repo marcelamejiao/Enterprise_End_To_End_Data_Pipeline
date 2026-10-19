@@ -9,6 +9,15 @@ loads.
 
 ## Data flow
 
+![Architecture diagram: Pipeline A (S3, Lambda, Snowpipe) and Pipeline B (Kafka, Spark) both feed the Bronze/Silver/Gold medallion layers in Snowflake, consumed by BI/analytics, with Pipeline C governance and monitoring wrapping the whole system.](architecture.png)
+
+Generated from `docs/generate_architecture_diagram.py` (pure stdlib Python,
+no deps) into `docs/architecture.svg`, then rasterized to the PNG above. To
+update it: edit the generator script, `python docs/generate_architecture_diagram.py`,
+then rasterize with any SVG renderer, e.g. `npx resvg-cli --fit-zoom 2.4 docs/architecture.svg docs/architecture.png`.
+
+Text equivalent:
+
 ```
                       ┌─────────────────────┐
   CSV/JSON files ───▶ │   S3 incoming/       │

@@ -6,6 +6,8 @@ See [PLAN.md](PLAN.md) for the full build plan.
 
 ## Architecture
 
+![Architecture diagram: Pipeline A (S3, Lambda, Snowpipe) and Pipeline B (Kafka, Spark) both feed the Bronze/Silver/Gold medallion layers in Snowflake, consumed by BI/analytics, with Pipeline C governance and monitoring wrapping the whole system.](docs/architecture.png)
+
 - **Pipeline A — Batch ingestion**: S3 → (Lambda file-tracking + Snowpipe, independently) → Snowflake Bronze/Silver/Gold (medallion architecture) using SQL transformations, Dynamic Tables, and Streams/Tasks for CDC. The Lambda tracks every file delivery in DynamoDB, flags duplicates, and quarantines invalid files before Snowpipe loads them.
 - **Pipeline B — Real-time event processing**: Kafka → Spark Structured Streaming, with checkpointing, watermarking, and dedup, writing to Delta Lake or Snowflake.
 - **Pipeline C — Governance & operational monitoring**: PII masking, role-based access, pipeline run logs, freshness checks, alerting, and CI/CD via GitHub Actions.
