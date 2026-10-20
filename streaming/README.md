@@ -30,16 +30,28 @@
    python streaming/spark_consumer.py --sink delta
    ```
 
-5. Verify output and dedup:
-   ```python
-   spark.read.format("delta").load("streaming/output/order_events").count()
+5. Verify output and dedup. A bare `spark` session (e.g. a plain `pyspark`
+   shell) doesn't have Delta's data source registered, so
+   `spark.read.format("delta").load(...)` on its own fails with
+   `[DATA_SOURCE_NOT_FOUND]`. Reuse `build_spark()` instead, which wires up
+   the same Delta config the consumer ran with:
    ```
-   Count should be less than events sent by the producer (duplicates dropped),
-   and every row should have a distinct `event_id`.
+   python -c "
+   from streaming.spark_consumer import build_spark
+   spark = build_spark()
+   df = spark.read.format('delta').load('streaming/output/order_events')
+   print('total:', df.count())
+   print('distinct event_ids:', df.select('event_id').distinct().count())
+   "
+   ```
+   The two counts should be equal (every row has a distinct `event_id`,
+   duplicates dropped), and `total` should be less than the events sent by
+   the producer.
 
 ## Recovery test
 
-Kill the `spark-submit` process mid-run and restart it with the same
+Kill the `python streaming/spark_consumer.py` process mid-run and restart it
+with the same
 `--checkpoint-path`. It should resume from the last committed Kafka offset
 without reprocessing already-written events or losing in-flight ones —
 this is what `tests/test_streaming_dedup.py` exercises at the function level,
