@@ -128,6 +128,18 @@ days by default); application-level dedup also happens in Silver
 (`snowflake/03_silver_transformations.sql`) via `QUALIFY ROW_NUMBER()...= 1`
 so a redelivered file never double-counts a row downstream either way.
 
+**Gotcha when manually re-testing**: dedup is keyed on `(object_key, etag)`,
+not on "does this file currently exist in its destination." If you delete a
+file from `incoming/orders/`/`incoming/customers/` after it's already been
+routed there, then re-drop the *identical* file (same bytes, same ETag)
+into `incoming/ingest/` to test again, the Lambda will recognize it as
+already-seen and silently skip it - it won't get reprocessed or re-moved.
+You'll see the file just sit in `incoming/ingest/` with no error anywhere.
+To force a fresh test, either change the file's content slightly (anything
+that changes its ETag, e.g. regenerate sample data) or delete its
+DynamoDB tracking item (`object_key`/`etag` from
+`aws dynamodb get-item ...`) before re-uploading.
+
 ## 4. Verify
 
 ```
