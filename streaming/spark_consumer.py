@@ -7,15 +7,28 @@ Lake (default) or, with --sink snowflake, appends to
 RETAIL_DWH.BRONZE.RAW_ORDER_EVENTS via the Snowflake Spark connector.
 
 Usage:
-    spark-submit streaming/spark_consumer.py --sink delta --output-path ./streaming/output
+    python streaming/spark_consumer.py --sink delta --output-path ./streaming/output
 
 Checkpointing (--checkpoint-path) is mandatory for recovery: on restart, Spark
 resumes from the last committed Kafka offset and the dedup state store,
 rather than reprocessing or dropping events.
+
+Run with plain `python`, not `spark-submit`: build_spark() below resolves
+the Kafka connector and Delta coordinates at runtime (via
+delta.configure_spark_with_delta_pip) to match whatever pyspark is actually
+installed (requirements.txt pins no version), rather than a hardcoded
+version pair that silently goes stale the moment a newer pyspark is
+installed (Spark 4.x moved its default Scala build from 2.12 to 2.13, so a
+hardcoded _2.12 connector fails against it with "Failed to find data
+source: kafka"). That resolution has to happen before the JVM starts, which
+`spark-submit script.py` already does without these packages on its
+classpath; plain `python script.py` instead lets pyspark bootstrap its own
+JVM from the config set here, so the packages are resolved in time.
 """
 
 import argparse
 
+import pyspark
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, from_json
 from pyspark.sql.types import StringType, StructField, StructType, TimestampType
@@ -30,12 +43,25 @@ EVENT_SCHEMA = StructType(
 )
 
 
+def _kafka_connector_coordinate() -> str:
+    spark_version = pyspark.__version__
+    # Spark switched its default Scala build from 2.12 to 2.13 in 4.0.
+    scala_version = "2.13" if int(spark_version.split(".")[0]) >= 4 else "2.12"
+    return f"org.apache.spark:spark-sql-kafka-0-10_{scala_version}:{spark_version}"
+
+
 def build_spark(app_name: str = "retail-order-events") -> SparkSession:
-    return (
+    from delta import configure_spark_with_delta_pip
+
+    builder = (
         SparkSession.builder.appName(app_name)
         .config("spark.sql.shuffle.partitions", "4")
-        .getOrCreate()
+        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
     )
+    return configure_spark_with_delta_pip(
+        builder, extra_packages=[_kafka_connector_coordinate()]
+    ).getOrCreate()
 
 
 def read_kafka_stream(spark: SparkSession, bootstrap_servers: str, topic: str):

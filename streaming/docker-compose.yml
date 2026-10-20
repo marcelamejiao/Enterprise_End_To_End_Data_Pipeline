@@ -1,5 +1,3 @@
-version: "3.8"
-
 # Local Kafka for Pipeline B. Kept local (no Kinesis) to avoid cloud
 # streaming costs while the processing logic is being developed — see
 # PLAN.md "Cost control". Swap in Kinesis later as a separate integration

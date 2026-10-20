@@ -17,11 +17,17 @@
    python streaming/event_producer.py --rate 5 --duration 120
    ```
 
-4. Start the Spark consumer (writes deduped events to Delta Lake by default):
+4. Start the Spark consumer (writes deduped events to Delta Lake by default).
+   Run it with plain `python`, not `spark-submit` — `build_spark()` resolves
+   the Kafka connector and Delta coordinates at runtime to match whatever
+   `pyspark`/`delta-spark` version is actually installed (`requirements.txt`
+   pins neither), instead of a hardcoded version pair that breaks the moment
+   a newer release is installed. That resolution needs to happen before the
+   JVM starts, which only works when `python` itself bootstraps the JVM —
+   `spark-submit script.py` starts its JVM first, too early for packages
+   configured from inside the script to take effect:
    ```
-   spark-submit \
-       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,io.delta:delta-spark_2.12:3.1.0 \
-       streaming/spark_consumer.py --sink delta
+   python streaming/spark_consumer.py --sink delta
    ```
 
 5. Verify output and dedup:
