@@ -163,11 +163,11 @@ dynamo = box(90, 440, 150, 60, "DynamoDB",
              title_size=12, text_size=10.5)
 
 orders_box = box(255, 440, 160, 60, "S3  incoming/orders/",
-                  ["Snowpipe watches this"], fill="#dbeafe", stroke="#2563eb",
+                  ["ORDERS_PIPE watches this"], fill="#dbeafe", stroke="#2563eb",
                   title_size=12, text_size=10.5)
 
 customers_box = box(430, 440, 160, 60, "S3  incoming/customers/",
-                     ["no auto-ingest yet"], fill="#dbeafe", stroke="#2563eb",
+                     ["CUSTOMERS_PIPE watches this"], fill="#dbeafe", stroke="#2563eb",
                      title_size=12, text_size=10.5)
 
 quarantine = box(605, 440, 155, 60, "S3  quarantine/",
@@ -208,7 +208,8 @@ bronze = box(90, 550, 1520, 85, "BRONZE   (RETAIL_DWH.BRONZE)",
              ["RAW_ORDERS, RAW_CUSTOMERS — source_file + ingested_at retained for lineage"],
              fill="#fef3c7", stroke="#b45309", title_size=16)
 
-arrow(center_bottom(orders_box), (center_bottom(orders_box)[0], 550), label="Snowpipe COPY INTO")
+arrow(center_bottom(orders_box), (center_bottom(orders_box)[0], 550), label="ORDERS_PIPE COPY INTO")
+arrow(center_bottom(customers_box), (center_bottom(customers_box)[0], 550), label="CUSTOMERS_PIPE COPY INTO")
 arrow(center_bottom(spark), (center_bottom(spark)[0], 550))
 
 silver = box(90, 685, 1200, 90, "SILVER   (RETAIL_DWH.SILVER)",

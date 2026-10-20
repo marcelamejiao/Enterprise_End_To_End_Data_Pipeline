@@ -3,8 +3,8 @@
 Automate ingestion once the manual `COPY INTO` path
 (`snowflake/02_bronze_ingestion.sql`) is validated.
 
-Three prefixes, each with a distinct job, and two S3 event notifications on
-two disjoint prefixes:
+Three prefixes, each with a distinct job, and three S3 event notifications
+on three disjoint prefixes:
 
 - **`incoming/ingest/`** — where files actually get uploaded. The Lambda
   (`aws/lambda/file_tracker.py`) is the only thing watching this prefix. It
@@ -14,19 +14,18 @@ two disjoint prefixes:
   for everything else, peeks at the file's header/content to tell orders
   data from customers data and **moves** it to the matching prefix below.
 - **`incoming/orders/`** — only ever written to by the Lambda, never
-  uploaded to directly. Snowpipe's own SQS-backed notification watches
+  uploaded to directly. `ORDERS_PIPE`'s own SQS-backed notification watches
   *this* prefix and loads valid files into `RETAIL_DWH.BRONZE.RAW_ORDERS`.
-- **`incoming/customers/`** — same idea, for customer data. (No Snowpipe on
-  this prefix yet; only `RAW_ORDERS` has an auto-ingest pipe today. Loading
-  `RAW_CUSTOMERS` automatically would mean adding a parallel
-  `CUSTOMERS_PIPE`/`CUSTOMERS_STAGE`, not built here.)
+- **`incoming/customers/`** — same idea, via `CUSTOMERS_PIPE`, loading into
+  `RETAIL_DWH.BRONZE.RAW_CUSTOMERS`.
 
-Keeping Lambda's notification scoped to `incoming/ingest/` and Snowpipe's
-scoped to `incoming/orders/` means the two notifications never overlap —
-important because S3 rejects overlapping prefix/event-type rules even
-across different destination types (Lambda vs. SQS), so a single shared
-`incoming/` prefix for both doesn't work. It also means the Lambda never
-re-triggers itself when it writes the moved file into `incoming/orders/` or
+Keeping each notification on its own disjoint prefix (Lambda on
+`incoming/ingest/`, the two Snowpipe queues on `incoming/orders/` and
+`incoming/customers/`) means none of them ever overlap — important because
+S3 rejects overlapping prefix/event-type rules even across different
+destination types (Lambda vs. SQS), so a single shared `incoming/` prefix
+for all three doesn't work. It also means the Lambda never re-triggers
+itself when it writes the moved file into `incoming/orders/` or
 `incoming/customers/`.
 
 They're still decoupled where it matters — Snowpipe only ever sees files
@@ -70,49 +69,54 @@ ansible-playbook infrastructure/provision_aws.yml \
     -e snowflake_external_id='<STORAGE_AWS_EXTERNAL_ID>'
 ```
 
-## 3. Create the stage and pipe, then wire Snowpipe's S3 notification (pass 3)
+## 3. Create the stages/pipes, then wire Snowpipe's S3 notifications (pass 3)
 
 Run `snowflake/02_bronze_ingestion.sql`'s stage/pipe statements (uncomment
-the `CREATE STAGE`/storage-integration lines, now that the integration
-exists). The stage URL points at `incoming/orders/` specifically, not
-`incoming/` — Snowpipe should only ever see files the Lambda has already
-routed there. Then:
+the `CREATE STAGE`/`CREATE PIPE` lines for both `ORDERS_STAGE`/`ORDERS_PIPE`
+and `CUSTOMERS_STAGE`/`CUSTOMERS_PIPE`, now that the integration exists).
+Each stage URL points at its own prefix (`incoming/orders/` or
+`incoming/customers/`) specifically, not `incoming/` — each pipe should
+only ever see files the Lambda has already routed there. Then:
 
 ```sql
-SHOW PIPES LIKE 'ORDERS_PIPE' IN SCHEMA RETAIL_DWH.BRONZE;
--- read notification_channel (the SQS queue ARN) from the output
+SHOW PIPES IN SCHEMA RETAIL_DWH.BRONZE;
+-- read notification_channel (the SQS queue ARN) for each pipe from the output
 ```
 
-Re-run the playbook a third time with that value to wire the bucket's
-`incoming/orders/` notification to Snowpipe's queue:
+Re-run the playbook a third time with those values to wire the bucket's
+`incoming/orders/` and `incoming/customers/` notifications to each queue
+(omit either `-e snowflake_*_sqs_queue_arn` if you only built one of the
+two pipes):
 
 ```
 ansible-playbook infrastructure/provision_aws.yml \
     -e bucket_name=<your-bucket>-retail-orders \
     -e snowflake_iam_user_arn='<STORAGE_AWS_IAM_USER_ARN>' \
     -e snowflake_external_id='<STORAGE_AWS_EXTERNAL_ID>' \
-    -e snowflake_sqs_queue_arn='<notification_channel from SHOW PIPES>'
+    -e snowflake_orders_sqs_queue_arn='<ORDERS_PIPE notification_channel>' \
+    -e snowflake_customers_sqs_queue_arn='<CUSTOMERS_PIPE notification_channel>'
 ```
 
 (Keep passing the pass-2 values too — omitting them would revert the
 Snowflake trust policy back to its deny-all placeholder.) No extra IAM
 permissions are needed for this task — Snowflake's auto-provisioned SQS
-queue already has a resource policy permitting S3 to send it messages, set
-up automatically when the storage integration was created. The
-`incoming/orders/` prefix here stays disjoint from the Lambda's
-`incoming/ingest/` notification, so the two never hit S3's
-overlapping-rules restriction (see above).
+queues already have resource policies permitting S3 to send them messages,
+set up automatically when the storage integration was created. Each prefix
+here stays disjoint from the Lambda's `incoming/ingest/` notification and
+from each other, so none of them hit S3's overlapping-rules restriction
+(see above).
 
-If a file lands directly in `incoming/orders/` (bypassing the Lambda
-entirely, which shouldn't normally happen — uploads are meant to go to
-`incoming/ingest/`) *before* this notification exists, Snowpipe never hears
-about it (S3 notifications only fire on new writes, not retroactively).
-Check for this with
+If a file lands directly in `incoming/orders/` or `incoming/customers/`
+(bypassing the Lambda entirely, which shouldn't normally happen — uploads
+are meant to go to `incoming/ingest/`) *before* the matching notification
+exists, Snowpipe never hears about it (S3 notifications only fire on new
+writes, not retroactively). Check for this with
 `SELECT * FROM TABLE(INFORMATION_SCHEMA.COPY_HISTORY(TABLE_NAME =>
 'RETAIL_DWH.BRONZE.RAW_ORDERS', START_TIME => DATEADD(hours, -2,
-CURRENT_TIMESTAMP())));` — if it's empty, the pipe was never notified.
-Backfill with `ALTER PIPE RETAIL_DWH.BRONZE.ORDERS_PIPE REFRESH;`, which
-scans the stage directly and bypasses the notification mechanism.
+CURRENT_TIMESTAMP())));` (swap in `RAW_CUSTOMERS` for the other pipe) — if
+it's empty, the pipe was never notified. Backfill with
+`ALTER PIPE RETAIL_DWH.BRONZE.ORDERS_PIPE REFRESH;` (or `CUSTOMERS_PIPE`),
+which scans the stage directly and bypasses the notification mechanism.
 
 ## Idempotency note
 
@@ -142,4 +146,13 @@ And confirm the Lambda tracked the delivery (keyed by the original
 ```
 aws dynamodb get-item --table-name FileIngestionTracker \
     --key '{"object_key": {"S": "incoming/ingest/sample_orders.csv"}, "etag": {"S": "<etag-from-s3-cp-output>"}}'
+```
+
+Same for customers data — upload `data/sample_customers.csv` to
+`incoming/ingest/` and it should get classified and routed to
+`incoming/customers/`, then `CUSTOMERS_PIPE` loads it into
+`RETAIL_DWH.BRONZE.RAW_CUSTOMERS`:
+```sql
+SELECT SYSTEM$PIPE_STATUS('RETAIL_DWH.BRONZE.CUSTOMERS_PIPE');
+SELECT * FROM RETAIL_DWH.BRONZE.RAW_CUSTOMERS ORDER BY INGESTED_AT DESC LIMIT 10;
 ```
